@@ -1,26 +1,69 @@
 package edu.indiana.d2i.htrc.randomsampling.tree;
 
 import java.io.BufferedReader;
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.*;
 
 import org.apache.log4j.Logger;
+
+import com.hp.hpl.jena.rdf.model.Model;
+import com.hp.hpl.jena.rdf.model.ModelFactory;
+import com.hp.hpl.jena.rdf.model.Property;
+import com.hp.hpl.jena.rdf.model.Resource;
+import com.hp.hpl.jena.rdf.model.Selector;
+import com.hp.hpl.jena.rdf.model.SimpleSelector;
+import com.hp.hpl.jena.rdf.model.StmtIterator;
 
 import edu.indiana.d2i.htrc.randomsampling.Configuration;
 import edu.indiana.d2i.htrc.randomsampling.exceptions.NoCategoryFound;
 import edu.indiana.d2i.htrc.randomsampling.exceptions.SampleNumberTooLarge;
 
-public class Tree {
-	private static Logger logger = Logger.getLogger(Tree.class);
-	private static Tree instance;
+public class CategoryTree {
+	private static Logger logger = Logger.getLogger(CategoryTree.class);
+	private static CategoryTree instance;
 	private final CategoryNode root;
-//	private final Configuration conf;
+	
+	private Property rootProperty;
+	private Property childProperty;
+	private void dfs(CategoryNode parent, Model model, Resource resource, Property property) {
+		Selector selector = new SimpleSelector(resource, property, (Object)null);
+		StmtIterator iter = model.listStatements(selector);
+		
+		String uri = resource.getURI();
+		while (iter.hasNext()) {
+			String str = iter.next().getObject().toString();					
+			if (str.startsWith("http://inkdroid.org/lcco/") && !str.equals(uri)) {				
+				String category = str.substring(str.lastIndexOf("/")+1);
+				category = category.replaceAll("\\(|\\)", "");
+				
+//				System.out.println(category);
+				
+				CategoryNode child = parent.addChild(category);				
+				dfs(child, model, model.createResource(str), childProperty);
+			}
+		}	
+	}
+	
+	private void loadCategory(String path) {
+		try (InputStream in = new FileInputStream(path)) {			
+			// read the RDF/XML file
+			Model model = ModelFactory.createDefaultModel().read(in, null);
+			
+			// build the tree (dfs)
+			rootProperty = model.createProperty("http://www.w3.org/2008/05/skos#hasTopConcept");
+			childProperty = model.createProperty("http://www.w3.org/2008/05/skos#narrower");
+			dfs(root, model, model.createResource("http://inkdroid.org/lcco/"), rootProperty);			
+		} catch (IOException e) {
+			throw new RuntimeException(e.getMessage(), e);
+		}
+	}
 	
 	// TODO: check line format
 	private void loadVolumeId(String path) {
-		try {
-			BufferedReader reader = new BufferedReader(new FileReader(path));
+		try (BufferedReader reader = new BufferedReader(new FileReader(path))) {
 			String line = null;
 			// <callno, <id1, id2, ...>>
 			Map<String, List<String>> categoryMapping = new HashMap<String, List<String>>();
@@ -49,13 +92,12 @@ public class Tree {
 				total++;
 				if (!validCategory) discard++;
 			}			
-			reader.close();
 			
 			int idCnt = 0;
 			for (Map.Entry<String, List<String>> entry : categoryMapping.entrySet()) {
 				String categoryStr = entry.getKey();
 				List<String> idlist = entry.getValue();
-				CategoryNode node = root.find(categoryStr);
+				CategoryNode node = root.findParent(categoryStr);
 				if (node != null) {
 					for (String id : idlist) node.addId(id);
 					idCnt += idlist.size();
@@ -71,23 +113,12 @@ public class Tree {
 		}
 	}
 	
-	private Tree(Configuration conf) {
+	private CategoryTree(Configuration conf) {
 		// build the structure
-		root = new CategoryNode();
-		root.addCategory("QH1-278.5");
-		root.addCategory("QH1-199.5");
-		root.addCategory("QH201-278.5");
-		root.addCategory("QH301-705.5");
-		root.addCategory("QH359-425");
-		root.addCategory("QH426-470");
-		root.addCategory("QH471-489");
-		root.addCategory("QH501-531");		
-		root.addCategory("QH540-549.5");
-		root.addCategory("QH573-671");
-		root.addCategory("QH705-705.5");
+		root = new CategoryNode(" ");
+		loadCategory(conf.getString(Configuration.PropertyNames.LOCC_RDF));
 		
 		// load the volume id
-//		this.conf = conf;
 		loadVolumeId(conf.getString(Configuration.PropertyNames.VOLUME_CALLNO));
 	}
 	
@@ -97,17 +128,22 @@ public class Tree {
 	}
 	
 	// unit test purpose only
+	protected CategoryNode root() {
+		return root;
+	}
+	
+	// unit test purpose only
 	protected int idCntInserted = 0;
 	
-	public synchronized static Tree getSingelton(Configuration conf) {
+	public synchronized static CategoryTree getSingelton(Configuration conf) {
 		if (instance == null) {
-			instance = new Tree(conf);
+			instance = new CategoryTree(conf);
 		}		
 		return instance;
 	}
 	
 	public int findIdCount(String categoryStr) throws NoCategoryFound {
-		CategoryNode node = root.find(categoryStr);  
+		CategoryNode node = root.findParent(categoryStr);  
 		if (node == null) {
 			throw new NoCategoryFound(categoryStr + " is not found!");
 		} else {
@@ -117,7 +153,7 @@ public class Tree {
 	
 	public List<String> randomSampling(String category, int number) 
 		throws NoCategoryFound, SampleNumberTooLarge {
-		CategoryNode node = root.find(category);
+		CategoryNode node = root.findParent(category);
 		if (node == null) {
 			throw new NoCategoryFound(category + " is not found!");
 		} else {

@@ -14,7 +14,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.log4j.Logger;
 
 import edu.indiana.d2i.htrc.randomsampling.Configuration;
-import edu.indiana.d2i.htrc.randomsampling.tree.Tree;
+import edu.indiana.d2i.htrc.randomsampling.tree.CategoryTree;
 
 @Path("/")
 public class RandomSamplingResources {
@@ -28,7 +28,7 @@ public class RandomSamplingResources {
 			return Response.status(400).entity("category is null!").build();
 		}		
 		
-		Tree tree = Tree.getSingelton(Configuration.getSingleton());
+		CategoryTree tree = CategoryTree.getSingelton(Configuration.getSingleton());
 		try {
 			int idcount = tree.findIdCount(category);
 			logger.info(String.format("There are %d #id for %s", idcount, category));
@@ -49,7 +49,7 @@ public class RandomSamplingResources {
 		}
 		
 		int number = Integer.parseInt(numStr);
-		Tree tree = Tree.getSingelton(Configuration.getSingleton());
+		CategoryTree tree = CategoryTree.getSingelton(Configuration.getSingleton());
 		try {
 			List<String> samples = tree.randomSampling(category, number);
 			return Response.status(200).entity(StringUtils.join(samples, "|")).build();

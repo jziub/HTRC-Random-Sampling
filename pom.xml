@@ -7,6 +7,7 @@
 	<version>1.0-SNAPSHOT</version>
 	<name>htrc-random-sampling</name>
 	<url>http://maven.apache.org</url>
+	
 	<dependencies>
 		<dependency>
 			<groupId>junit</groupId>
@@ -73,6 +74,13 @@
 			<artifactId>jetty-servlet</artifactId>
 			<version>9.2.0.v20140526</version>
 		</dependency>
+
+		<!-- jena API -->
+		<dependency>
+			<groupId>org.apache.jena</groupId>
+			<artifactId>jena-core</artifactId>
+			<version>2.12.1</version>
+		</dependency>		
 	</dependencies>
 
 	<build>

@@ -13,11 +13,9 @@ public class TestTree {
 	public void testTreeCreation() throws NoCategoryFound {
 		Configuration config = Configuration.getSingleton();
 		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./eng-QH-callno");
-//		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./test.txt");
-		Tree tree = Tree.getSingelton(config);
-		Assert.assertEquals(tree.idCntInserted, tree.idCount());		
+		config.setString(Configuration.PropertyNames.LOCC_RDF, "./conf/lcco.rdf");
+		CategoryTree tree = CategoryTree.getSingelton(config);
 		
-		System.out.println(tree.idCount());
 		System.out.println("QH1-278.5 " + tree.findIdCount("QH1-278.5"));
 		System.out.println("QH1-199.5 " + tree.findIdCount("QH1-199.5"));
 		System.out.println("QH201-278.5 " + tree.findIdCount("QH201-278.5"));

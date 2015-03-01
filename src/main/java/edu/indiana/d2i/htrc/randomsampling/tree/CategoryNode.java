@@ -1,6 +1,7 @@
 package edu.indiana.d2i.htrc.randomsampling.tree;
 
 import java.util.*;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.log4j.Logger;
@@ -34,11 +35,12 @@ import edu.indiana.d2i.htrc.randomsampling.exceptions.SampleNumberTooLarge;
 class CategoryNode {
 	static Pattern rangePattern = Pattern.compile("\\d+(\\.\\d+)?-\\d+(\\.\\d+)?");
 	static Pattern digitPattern = Pattern.compile("\\d+(\\.\\d+)?");
+	static Pattern letterPattern = Pattern.compile("[A-Z]+");
 	static Pattern categoryPattern = Pattern.compile("[A-Z]+\\d+(\\.\\d+)?|[A-Z]+\\d+(\\.\\d+)?-\\d+(\\.\\d+)?");
 	
 	private static Logger logger = Logger.getLogger(CategoryNode.class);
-	
-	class Range {
+
+	static class Range implements Comparable<Range> {
 		float min = -1;
 		float max = -1;
 		
@@ -50,20 +52,85 @@ class CategoryNode {
 		public String toString() {
 			return String.format("[%f, %f]", min, max);
 		}
-	}
 
-	class Children {
-		private List<String> prefix = new ArrayList<String>();
-		private List<Range> ranges = new ArrayList<Range>();
+		@Override
+		public int compareTo(Range cmp) {
+			if (this.min < cmp.min) {
+				return -1;
+			} else if (this.min > cmp.min) {
+				return 1;
+			} else {
+				if (this.max < cmp.max) {
+					return -1;
+				} else if (this.max > cmp.max) {
+					return 1;
+				} else {
+					return 0;
+				}
+			}
+		}
+		
+		public static Range valueOf(String str) {
+			if (rangePattern.matcher(str).matches()) {
+				String[] item = str.split("-");
+				return new Range(Float.parseFloat(item[0]), Float.parseFloat(item[1]));
+			} else if (digitPattern.matcher(str).matches()) {
+				return new Range(Float.parseFloat(str), Float.parseFloat(str));
+			} else {
+				return null;
+			}
+		}
+	}
+	
+	class Children {	
+		private Map<String, List<Integer>> letterIndices = new HashMap<String, List<Integer>>();
+		private Map<Range, Integer> rangeIndices = new HashMap<Range, Integer>();		
 		
 		private List<CategoryNode> childNodes = new ArrayList<CategoryNode>();
 		
-		/** It is used to insert tree nodes. [1, 295] will be viewed as the same as [1, 300] */
-		protected int getIndex(Category category) {
-			if (category.isLetter == true) {
-				return Collections.binarySearch(prefix, category.prefixStr);
-			} else {				
-				return Collections.binarySearch(ranges, category.range, new Comparator<Range>() {
+		public void addChild(Category category, CategoryNode child) {			
+			childNodes.add(child);
+			
+			if (category.isLetter) {
+				if (!letterIndices.containsKey(category.prefixStr)) {
+					letterIndices.put(category.prefixStr, new ArrayList<Integer>());
+				}			
+				letterIndices.get(category.prefixStr).add(childNodes.size()-1);
+			} else {
+				rangeIndices.put(category.range, childNodes.size()-1);
+			}
+		}
+		
+		/**
+		 * It tries to find an exact match for the category. If the query string
+		 * does not match any category, it tries to find the closest i.e. the lowest
+		 * node in the tree that matches the query string.
+		 */
+		public CategoryNode getParent(Category category) {			
+			if (category.isLetter) {
+				// digit prefix
+				List<Integer> index = letterIndices.get(category.prefixStr);
+				if (index != null) {
+					// exhaustive search
+					for (int pos : index) {
+						CategoryNode node = childNodes.get(pos);
+						if (node.categoryStr.equals(category.str)) {
+							return node;
+						} 
+						
+						if (category.str.startsWith(node.categoryPrefix)) {
+							CategoryNode res = node.findParent(category.str);
+							if (res != null) {
+								return res;
+							}
+						}		
+					}
+				}
+			} else {
+				// range prefix
+				List<Range> ranges = new ArrayList<Range>(rangeIndices.keySet());
+				Collections.sort(ranges);
+				int pos = Collections.binarySearch(ranges, category.range, new Comparator<Range>() {
 					@Override
 					public int compare(Range r1, Range r2) {
 						if ((r1.min >= r2.min && r1.max <= r2.max) || 
@@ -76,101 +143,97 @@ class CategoryNode {
 						}
 					}					
 				});
-			}
-		}
-		
-		public void updateChild(Category category) {
-			int index = getIndex(category);
-			String subStr = category.suffixStr;
-			if (index >= 0) {
-				if (category.isLetter == true && subStr != null) childNodes.get(index).addCategory(subStr);
-				else childNodes.get(index).addCategory(category.toString());
-			} else {
-				index = -(index + 1);
-				if (category.isLetter == true) {
-					prefix.add(index, category.prefixStr);
-				} else {
-					ranges.add(index, category.range);
-				}
-				childNodes.add(index, new CategoryNode(category.prefixStr));
 				
-				if (category.isLetter == true && subStr != null) childNodes.get(index).addCategory(subStr);
-			}
-		}
-		
-		/**
-		 * It tries to find an exact match for the category. If the query string
-		 * does not match any category, it tries to find the closest i.e. the lowest
-		 * node in the tree that matches the query string.
-		 */
-		public CategoryNode getChild(Category category) {
-			int index = getIndex(category);
-			if (index < 0) {
-//				throw new IllegalArgumentException(category + " does not exist!");
-				return null;
+				if (pos >= 0) {
+					CategoryNode node = childNodes.get(rangeIndices.get(ranges.get(pos)));
+					if (node.children.childNodes.size() == 0 || node.categoryStr.equals(category.str)) {
+						return node;
+					} 
+					CategoryNode res = node.findParent(category.str);
+					if (res != null) {
+						return res;
+					}
+				} else if ((range.min >= category.range.min && range.max <= category.range.max)
+					|| (category.range.min >= range.min && category.range.max <= range.max)) {
+					return CategoryNode.this;
+				}
 			}
 			
-			CategoryNode child = childNodes.get(index);
-			if (child.children.childNodes.size() == 0) {
-				return child;
-			} else if (category.isLetter == true) {
-				return (category.suffixStr == null) ? child: child.find(category.suffixStr);
-			} else {
-				if (child.categoryStr.equals(category.prefixStr)) {
-					return child;
-				} else {
-					CategoryNode res = child.find(category.prefixStr);
-					return (res != null) ? res: child;				
-				}				
-//				return (child.categoryStr.equals(category.prefixStr)) ? child: child.find(category.prefixStr); 
-			}
-		}
+			return null;
+		 }
 	}
-	
-	/**
-	 * This class parses the category string. Because a category in the tree could
-	 * be a letter or a range, the isLetter field is used to tell if the category
-	 * is a letter or a range.
-	 */
+
 	class Category {
 		String str; // the whole string
-		
 		String prefixStr = null; 
-		String suffixStr = null;
-		Range range = null; 
-		boolean isLetter = false; // whether this category is a letter or a range
-
-		public Category(String str) {
+		boolean isLetter = false;
+		Range range = null;
+		
+		public Category(String str) {		
 			this.str = str;
-			if (rangePattern.matcher(str).matches()) {
-				String[] item = str.split("-");
-				range = new Range(Float.parseFloat(item[0]), Float.parseFloat(item[1]));
-				this.prefixStr = str;
-			} else if (digitPattern.matcher(str).matches()) {
-				range = new Range(Float.parseFloat(str), Float.parseFloat(str));
-				this.prefixStr = str;
+			if (categoryPrefix != null) {
+				String tmp = str.substring(categoryPrefix.length());				
+				this.prefixStr = (tmp.length() == 0 || !(tmp.charAt(0) >= 'A' && tmp.charAt(0) <= 'Z')) ? 
+					tmp: tmp.substring(0, 1);
+				isLetter = (rangePattern.matcher(prefixStr).matches() || digitPattern
+					.matcher(prefixStr).matches()) ? false : true; 
 			} else {
-				isLetter = true;
-				this.prefixStr = str.substring(0, 1);
-				this.suffixStr = (str.length() > 1) ? str.substring(1): null;
+				char c = str.charAt(0);
+				if (c >= 'A' && c <= 'Z') {
+					this.prefixStr = str.substring(0, 1);
+					isLetter = true;
+				} else {
+					this.prefixStr = str;
+				}
+			}	
+			
+			if (!isLetter) {
+				range = Range.valueOf(prefixStr);
+				if (range == null) logger.error("Fail to parse " + prefixStr + " to range!");
 			}
-		}
-
-		public String getCurrentCategoryStr() {
-			return this.prefixStr;
-		}
-
-		public String getSubCategoryStr() {
-			return this.suffixStr;
 		}
 		
 		public String toString() {
 			return this.str;
 		}
+		
+		@Override
+		public int hashCode() {
+			return str.hashCode();
+		}
+		
+		@Override
+		public boolean equals(Object obj) {
+			String cmp = ((Category) obj).str;
+			return this.str.equals(cmp);
+		}
+		
+		
+//		@Override
+//		public int hashCode() {
+//			return (prefixStr.equals("E-F") || prefixStr.startsWith("E") || prefixStr
+//				.startsWith("F")) ? "E".hashCode() : prefixStr.hashCode();
+//		}
+//		
+//		@Override
+//		public boolean equals(Object obj) {
+//			String cmp = ((Prefix) obj).prefixStr;
+//			if (prefixStr.equals(cmp)){
+//				return true;
+//			} else if (prefixStr.equals("E-F")) {
+//				return (cmp.equals("E") || cmp.equals("F")) ? true : false;
+//			} else if (cmp.equals("E-F")) {
+//				return (prefixStr.equals("E") || (prefixStr.equals("F"))) ? true : false;
+//			} else {
+//				return this.prefixStr.equals(((Prefix)obj).prefixStr);
+//			}
+//		}
 	}
-
+	
 	private Children children = new Children();
-	private String categoryStr = null;	
+	private String categoryStr = null;
+	private Range range = null;
+	private String categoryPrefix = null;
 
 	//
 	private List<String> idList = new ArrayList<String>();
@@ -208,21 +271,32 @@ class CategoryNode {
 	
 	public CategoryNode(String category) {
 		this.categoryStr = category;
+		Matcher matcher = letterPattern.matcher(category);
+		if (matcher.find()) {
+			this.categoryPrefix = matcher.group(0);
+			String suffix = category.substring(categoryPrefix.length());
+			if (suffix.length() > 0) {
+				range = Range.valueOf(suffix);
+				if (range == null) logger.error("Fail to parse " + suffix + " to range for " + category);
+			}
+		}
 	}
 
-	public void addCategory(String str) {
-		Category category = new Category(str);
-		children.updateChild(category);
+	public CategoryNode addChild(String str) {		
+		CategoryNode child = new CategoryNode(str);
+		children.addChild(new Category(str), child);
+		return child;
 	}
 
-	public CategoryNode find(String category) {
-		return children.getChild(new Category(category));
+	public CategoryNode findParent(String category) {
+		return children.getParent(new Category(category));
 	}
 	
 	public void addId(String volumeID) {
 		this.idList.add(volumeID);
 	}
 
+	// TODO: fix me!
 	public List<String> samples(int sampleNum) throws SampleNumberTooLarge {
 		// calculate the #samples for each child
 		double total = idList.size();
@@ -246,7 +320,7 @@ class CategoryNode {
 		}		
 		logger.debug("CDF: " + Arrays.toString(cdf));
 		
-		// 
+		// binary search
 		int[] samples = new int[children.childNodes.size() + 1];
 		for (int i = 0; i < sampleNum; i++) {
 			double dice = Math.random();
