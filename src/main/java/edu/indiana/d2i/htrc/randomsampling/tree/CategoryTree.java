@@ -37,7 +37,7 @@ public class CategoryTree {
 			String str = iter.next().getObject().toString();					
 			if (str.startsWith("http://inkdroid.org/lcco/") && !str.equals(uri)) {				
 				String category = str.substring(str.lastIndexOf("/")+1);
-				category = category.replaceAll("\\(|\\)", "");
+				category = category.replaceAll("\\(|\\)|\\s", "");
 				
 //				System.out.println(category);
 				

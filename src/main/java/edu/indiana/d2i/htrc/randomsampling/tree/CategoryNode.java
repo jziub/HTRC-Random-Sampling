@@ -10,18 +10,7 @@ import edu.indiana.d2i.htrc.randomsampling.exceptions.SampleNumberTooLarge;
 
 /**
  * This is the core part of the random sampling. It represents the category of
- * library of congress (LOCC) as a tree. The tree is designed as a trie. An
- * example representation is as follows.
- * <p>
- * 
- *              Q                 <br>
- *             /                  <br>
- *            QH                  <br>
- *          /    \                <br>
- *      1-278.5  301-705.5        <br>
- *     /      \                   <br>
- *  1-199.5 201-278.5             <br>
- * 
+ * library of congress (LOCC) as a tree. The tree is designed as a trie. 
  * <p>
  * A query string is broken into a letter part and a range part. The query is
  * similar to a trie query but not exactly the same. The letter part of the
@@ -35,7 +24,7 @@ import edu.indiana.d2i.htrc.randomsampling.exceptions.SampleNumberTooLarge;
 class CategoryNode {
 	static Pattern rangePattern = Pattern.compile("\\d+(\\.\\d+)?-\\d+(\\.\\d+)?");
 	static Pattern digitPattern = Pattern.compile("\\d+(\\.\\d+)?");
-	static Pattern letterPattern = Pattern.compile("[A-Z]+");
+	static Pattern letterPattern = Pattern.compile("[A-Z]+|E-F");
 	static Pattern categoryPattern = Pattern.compile("[A-Z]+\\d+(\\.\\d+)?|[A-Z]+\\d+(\\.\\d+)?-\\d+(\\.\\d+)?");
 	
 	private static Logger logger = Logger.getLogger(CategoryNode.class);
@@ -88,6 +77,25 @@ class CategoryNode {
 		
 		private List<CategoryNode> childNodes = new ArrayList<CategoryNode>();
 		
+		private int binarySearchRange(List<Range> ranges, Range target) {
+			int low = 0;
+			int high = ranges.size()- 1;
+			while (low <= high) {
+				int mid = (low + high) / 2;
+				Range tmp = ranges.get(mid);
+				if (target.min >= tmp.min && target.max <= tmp.max) {
+					return mid;
+				} else {
+					if (tmp.min > target.min) {
+						high = mid - 1;
+					} else {
+						low = mid + 1;
+					}
+				}
+			}
+			return -1;
+		}
+		
 		public void addChild(Category category, CategoryNode child) {			
 			childNodes.add(child);
 			
@@ -108,8 +116,10 @@ class CategoryNode {
 		 */
 		public CategoryNode getParent(Category category) {			
 			if (category.isLetter) {
-				// digit prefix
-				List<Integer> index = letterIndices.get(category.prefixStr);
+				// digit prefix, special case of E-F
+				String prefix = category.prefixStr;
+				if (prefix.equals("E") || prefix.equals("F")) prefix = "E-F";
+				List<Integer> index = letterIndices.get(prefix);
 				if (index != null) {
 					// exhaustive search
 					for (int pos : index) {
@@ -118,7 +128,8 @@ class CategoryNode {
 							return node;
 						} 
 						
-						if (category.str.startsWith(node.categoryPrefix)) {
+						if ((node.categoryPrefix.equals("E-F") && (category.str.startsWith("E") || category.str.startsWith("F"))) ||
+							category.str.startsWith(node.categoryPrefix)) {
 							CategoryNode res = node.findParent(category.str);
 							if (res != null) {
 								return res;
@@ -130,20 +141,7 @@ class CategoryNode {
 				// range prefix
 				List<Range> ranges = new ArrayList<Range>(rangeIndices.keySet());
 				Collections.sort(ranges);
-				int pos = Collections.binarySearch(ranges, category.range, new Comparator<Range>() {
-					@Override
-					public int compare(Range r1, Range r2) {
-						if ((r1.min >= r2.min && r1.max <= r2.max) || 
-							(r2.min >= r1.min && r2.max <= r1.max)) {
-							return 0;
-						} else if (r1.max < r2.max) {
-							return -1;
-						} else {
-							return 1;
-						}
-					}					
-				});
-				
+				int pos = binarySearchRange(ranges, category.range);
 				if (pos >= 0) {
 					CategoryNode node = childNodes.get(rangeIndices.get(ranges.get(pos)));
 					if (node.children.childNodes.size() == 0 || node.categoryStr.equals(category.str)) {
@@ -153,8 +151,8 @@ class CategoryNode {
 					if (res != null) {
 						return res;
 					}
-				} else if ((range.min >= category.range.min && range.max <= category.range.max)
-					|| (category.range.min >= range.min && category.range.max <= range.max)) {
+				} else if (category.range.min >= range.min && category.range.max <= range.max) {
+					// the target does not belong to any child, but it belongs to the parent
 					return CategoryNode.this;
 				}
 			}
@@ -172,24 +170,30 @@ class CategoryNode {
 		public Category(String str) {		
 			this.str = str;
 			if (categoryPrefix != null) {
-				String tmp = str.substring(categoryPrefix.length());				
+				int skipLength = (categoryPrefix.equals("E-F")) ? 1: categoryPrefix.length();
+				String tmp = str.substring(skipLength);				
 				this.prefixStr = (tmp.length() == 0 || !(tmp.charAt(0) >= 'A' && tmp.charAt(0) <= 'Z')) ? 
 					tmp: tmp.substring(0, 1);
 				isLetter = (rangePattern.matcher(prefixStr).matches() || digitPattern
 					.matcher(prefixStr).matches()) ? false : true; 
 			} else {
-				char c = str.charAt(0);
-				if (c >= 'A' && c <= 'Z') {
-					this.prefixStr = str.substring(0, 1);
-					isLetter = true;
-				} else {
+				if (str.equals("E-F")) {
 					this.prefixStr = str;
+					this.isLetter = true;
+				} else {
+					char c = str.charAt(0);
+					if (c >= 'A' && c <= 'Z') {
+						this.prefixStr = str.substring(0, 1);
+						isLetter = true;
+					} else {
+						this.prefixStr = str;
+					}
 				}
 			}	
 			
 			if (!isLetter) {
 				range = Range.valueOf(prefixStr);
-				if (range == null) logger.error("Fail to parse " + prefixStr + " to range!");
+				if (range == null) logger.warn("Fail to parse " + prefixStr + " to range!");
 			}
 		}
 		
@@ -207,27 +211,6 @@ class CategoryNode {
 			String cmp = ((Category) obj).str;
 			return this.str.equals(cmp);
 		}
-		
-		
-//		@Override
-//		public int hashCode() {
-//			return (prefixStr.equals("E-F") || prefixStr.startsWith("E") || prefixStr
-//				.startsWith("F")) ? "E".hashCode() : prefixStr.hashCode();
-//		}
-//		
-//		@Override
-//		public boolean equals(Object obj) {
-//			String cmp = ((Prefix) obj).prefixStr;
-//			if (prefixStr.equals(cmp)){
-//				return true;
-//			} else if (prefixStr.equals("E-F")) {
-//				return (cmp.equals("E") || cmp.equals("F")) ? true : false;
-//			} else if (cmp.equals("E-F")) {
-//				return (prefixStr.equals("E") || (prefixStr.equals("F"))) ? true : false;
-//			} else {
-//				return this.prefixStr.equals(((Prefix)obj).prefixStr);
-//			}
-//		}
 	}
 	
 	private Children children = new Children();
@@ -273,11 +256,15 @@ class CategoryNode {
 		this.categoryStr = category;
 		Matcher matcher = letterPattern.matcher(category);
 		if (matcher.find()) {
-			this.categoryPrefix = matcher.group(0);
-			String suffix = category.substring(categoryPrefix.length());
-			if (suffix.length() > 0) {
-				range = Range.valueOf(suffix);
-				if (range == null) logger.error("Fail to parse " + suffix + " to range for " + category);
+			if (category.equals("E-F")) {
+				this.categoryPrefix = category;
+			} else {
+				this.categoryPrefix = matcher.group(0);
+				String suffix = category.substring(categoryPrefix.length());
+				if (suffix.length() > 0) {
+					range = Range.valueOf(suffix);
+					if (range == null) logger.warn("Fail to parse " + suffix + " to range for " + category);
+				}
 			}
 		}
 	}
