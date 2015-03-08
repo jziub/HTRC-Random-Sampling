@@ -109,6 +109,33 @@ class CategoryNode {
 			}
 		}
 		
+		public List<CategoryNode> getParentsByPrefix(String prefix, String suffix) {
+			if (prefix.equals("E") || prefix.equals("F")) prefix = "E-F";
+			List<Integer> index = letterIndices.get(prefix);
+			if (index != null) {
+				if (suffix.equals("")) {
+					// no more prefix
+					List<CategoryNode> res = new ArrayList<CategoryNode>();
+					for (int pos : index) {
+						res.add(childNodes.get(pos));
+					}
+					return res;
+				} else {
+					// move to the next character
+					for (int pos : index) {
+						CategoryNode node = childNodes.get(pos);
+						List<CategoryNode> res = node.findParentsByPrefix(suffix);
+						if (res != null) {
+							return res;
+						}
+					}
+					return null;
+				}
+			} else {
+				return null;
+			}
+		}
+		
 		/**
 		 * It tries to find an exact match for the category. If the query string
 		 * does not match any category, it tries to find the closest i.e. the lowest
@@ -151,7 +178,7 @@ class CategoryNode {
 					if (res != null) {
 						return res;
 					}
-				} else if (category.range.min >= range.min && category.range.max <= range.max) {
+				} else if (range != null && category.range.min >= range.min && category.range.max <= range.max) {
 					// the target does not belong to any child, but it belongs to the parent
 					return CategoryNode.this;
 				}
@@ -252,6 +279,43 @@ class CategoryNode {
 		return categoryPattern.matcher(categoryStr).matches();
 	}
 	
+	public static int[] getSampleNums(int sampleNum, int[] counts) throws SampleNumberTooLarge {
+		// calculate the #samples for each child
+		double total = 0;
+		for (int count : counts) total += count;
+		
+		if (total < sampleNum) {
+			throw new SampleNumberTooLarge(String.format(
+				"Sampling number %d is larger than the total number %d", sampleNum, (int)total));
+		}
+		
+		// calculate the cdf [current node, children]
+		double[] cdf = new double[counts.length];
+		cdf[0] = counts[0] / total;
+		for (int i = 1; i < cdf.length; i++) {
+			cdf[i] = cdf[i-1] + counts[i]/total;
+		}		
+		logger.debug("CDF: " + Arrays.toString(cdf));
+		
+		// binary search
+		int[] samples = new int[counts.length];
+		for (int i = 0; i < sampleNum; i++) {
+			double dice = Math.random();
+			int low = 0; 
+			int high = cdf.length - 1;
+			while (low < high) {
+				int mid = (low + high) / 2;
+				if (cdf[mid] >= dice) {
+					high = mid;
+				} else {
+					low = mid + 1;
+				}
+			}
+			samples[low]++;
+		}
+		return samples;
+	}
+	
 	public CategoryNode(String category) {
 		this.categoryStr = category;
 		Matcher matcher = letterPattern.matcher(category);
@@ -279,50 +343,22 @@ class CategoryNode {
 		return children.getParent(new Category(category));
 	}
 	
+	public List<CategoryNode> findParentsByPrefix(String prefix) {
+		return children.getParentsByPrefix(prefix.substring(0, 1), prefix.substring(1));
+	}
+	
 	public void addId(String volumeID) {
 		this.idList.add(volumeID);
 	}
 
-	// TODO: fix me!
-	public List<String> samples(int sampleNum) throws SampleNumberTooLarge {
-		// calculate the #samples for each child
-		double total = idList.size();
+	public List<String> samples(int sampleNum) throws SampleNumberTooLarge {		
+		// get children id count
 		int[] idcount = new int[children.childNodes.size() + 1];
 		idcount[0] = idList.size();
 		for (int i = 1; i < idcount.length; i++) {
 			idcount[i] = children.childNodes.get(i-1).idCount();
-			total += idcount[i];
 		}
-		
-		if (total < sampleNum) {
-			throw new SampleNumberTooLarge(String.format(
-				"Sampling number %d is larger than the total number %d", sampleNum, (int)total));
-		}
-		
-		// calculate the cdf [current node, children]
-		double[] cdf = new double[children.childNodes.size() + 1];
-		cdf[0] = idList.size() / total;
-		for (int i = 1; i < cdf.length; i++) {
-			cdf[i] = cdf[i-1] + children.childNodes.get(i-1).idCount()/total;
-		}		
-		logger.debug("CDF: " + Arrays.toString(cdf));
-		
-		// binary search
-		int[] samples = new int[children.childNodes.size() + 1];
-		for (int i = 0; i < sampleNum; i++) {
-			double dice = Math.random();
-			int low = 0; 
-			int high = cdf.length - 1;
-			while (low < high) {
-				int mid = (low + high) / 2;
-				if (cdf[mid] >= dice) {
-					high = mid;
-				} else {
-					low = mid + 1;
-				}
-			}
-			samples[low]++;
-		}
+		int[] samples = getSampleNums(sampleNum, idcount);
 		logger.debug("Samples: " + Arrays.toString(samples) + " in " + this.categoryStr);
 		
 		// random sampling
@@ -333,6 +369,16 @@ class CategoryNode {
 		volumes.addAll(randomsample(samples[0]));
 		
 		return volumes;
+	}
+	
+	public List<String> getAllIDs() {
+		List<String> res = new ArrayList<String>();
+		if (idList.size() != 0) res.addAll(idList);
+		
+		for (CategoryNode child : children.childNodes) {
+			res.addAll(child.getAllIDs());
+		}
+		return res;
 	}
 	
 	public String toString() {

@@ -2,11 +2,12 @@
 <configuration>
 	<property>
       	<name>htrc.random.locc</name>
-		<value>XXX</value>
+		<value>./conf/lcco.rdf</value>
     </property>	  
     <property>
       	<name>htrc.random.volume.callno</name>
-		<value>./eng-QH-callno</value>
+		<!--  <value>./eng-QH-callno</value>  -->
+		<value>./eng-volume-callnumber.info</value>
     </property>	     
     
     <!-- log4j property file -->

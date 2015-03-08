@@ -1,5 +1,7 @@
 package edu.indiana.d2i.htrc.randomsampling.tree;
 
+import java.util.List;
+
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -57,5 +59,12 @@ public class TestCategoryNode extends CategoryNode {
 		
 		// on non leaf nodes
 		Assert.assertEquals("QH301-705.5", root.findParent("QH332").toString());
+	}
+	
+	/** test prefix match */
+	@Test
+	public void testChildren3() {	
+		List<CategoryNode> nodes1 = root.findParentsByPrefix("QH");
+		Assert.assertEquals(2, nodes1.size());
 	}
 }

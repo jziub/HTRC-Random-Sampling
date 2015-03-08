@@ -12,7 +12,8 @@ public class TestTree {
 	@Test
 	public void testTreeCreation() throws NoCategoryFound {
 		Configuration config = Configuration.getSingleton();
-		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./eng-QH-callno");
+//		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./eng-QH-callno");
+		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./eng-volume-callnumber.info");
 		config.setString(Configuration.PropertyNames.LOCC_RDF, "./conf/lcco.rdf");
 		CategoryTree tree = CategoryTree.getSingelton(config);
 		

@@ -77,8 +77,10 @@ public class CategoryTree {
 				int last = line.indexOf("]");
 				String id = line.substring(0, pivot).trim();
 				String[] callnums = line.substring(pivot+1, last).trim().split(",");
+				
 				boolean validCategory = false;
-				for (String callnum : callnums) {
+				for (String callnum : callnums) {				
+					if (callnum.length() <= 1) continue;					
 					String categoryStr = callnum.substring(1, callnum.length()-1).split("\\.")[0].trim();
 					if (CategoryNode.validateCategoryString(categoryStr)) {
 						if (!categoryMapping.containsKey(categoryStr)) {
@@ -96,7 +98,7 @@ public class CategoryTree {
 			int idCnt = 0;
 			for (Map.Entry<String, List<String>> entry : categoryMapping.entrySet()) {
 				String categoryStr = entry.getKey();
-				List<String> idlist = entry.getValue();
+				List<String> idlist = entry.getValue();				
 				CategoryNode node = root.findParent(categoryStr);
 				if (node != null) {
 					for (String id : idlist) node.addId(id);
@@ -117,9 +119,11 @@ public class CategoryTree {
 		// build the structure
 		root = new CategoryNode(" ");
 		loadCategory(conf.getString(Configuration.PropertyNames.LOCC_RDF));
+		logger.info("Category loading is finished!");
 		
 		// load the volume id
 		loadVolumeId(conf.getString(Configuration.PropertyNames.VOLUME_CALLNO));
+		logger.info("Volume id loading is finished!");
 	}
 	
   // unit test purpose only
@@ -145,19 +149,58 @@ public class CategoryTree {
 	public int findIdCount(String categoryStr) throws NoCategoryFound {
 		CategoryNode node = root.findParent(categoryStr);  
 		if (node == null) {
-			throw new NoCategoryFound(categoryStr + " is not found!");
+			List<CategoryNode> nodes = root.findParentsByPrefix(categoryStr);
+			if (nodes == null) {
+				throw new NoCategoryFound(categoryStr + " is not found!");
+			} else {
+				int sum = 0;
+				for (CategoryNode item : nodes) {
+					sum += item.idCount();
+				}
+				return sum;
+			}			
 		} else {
 			return node.idCount();
 		}
 	}
 	
-	public List<String> randomSampling(String category, int number) 
+	public List<String> randomSampling(String categoryStr, int number) 
 		throws NoCategoryFound, SampleNumberTooLarge {
-		CategoryNode node = root.findParent(category);
+		CategoryNode node = root.findParent(categoryStr);
 		if (node == null) {
-			throw new NoCategoryFound(category + " is not found!");
+			List<CategoryNode> nodes = root.findParentsByPrefix(categoryStr);
+			if (nodes == null) {
+				throw new NoCategoryFound(categoryStr + " is not found!");
+			} else {
+				int[] counts = new int[nodes.size()];
+				for (int i = 0; i < nodes.size(); i++) counts[i] = nodes.get(i).idCount();
+				int[] samples = CategoryNode.getSampleNums(number, counts);
+				List<String> res = new ArrayList<String>();
+				for (int i = 0; i < counts.length; i++) {
+					res.addAll(nodes.get(i).samples(samples[i]));
+				}
+				return res;
+			}
 		} else {
 			return node.samples(number);
+		}
+	}
+	
+	public List<String> getIDs(String categoryStr) throws NoCategoryFound {
+		CategoryNode node = root.findParent(categoryStr);  
+		if (node == null) {
+			List<CategoryNode> nodes = root.findParentsByPrefix(categoryStr);
+			if (nodes == null) {
+				throw new NoCategoryFound(categoryStr + " is not found!");
+			} else {
+				List<String> res = new ArrayList<String>();
+				for (CategoryNode item : nodes) {
+					res.addAll(item.getAllIDs());
+				}
+				return res;
+			}			
+		} else {
+			return node.getAllIDs();
 		}
 	}
 }

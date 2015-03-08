@@ -58,4 +58,22 @@ public class RandomSamplingResources {
 			return Response.status(400).entity(e.getMessage()).build();
 		}
 	}
+	
+	@GET
+	@Path("getid")
+	public Response getIDs(@QueryParam("category") String category,
+		@Context HttpHeaders httpHeaders, @Context HttpServletRequest httpServletRequest) {
+		if (category == null) {
+			return Response.status(400).entity("category is null!").build();
+		}	
+		
+		CategoryTree tree = CategoryTree.getSingelton(Configuration.getSingleton());
+		try {
+			List<String> id = tree.getIDs(category);
+			return Response.status(200).entity(StringUtils.join(id, "|")).build();
+		} catch (Exception e) {
+			logger.error(e.getMessage(), e);
+			return Response.status(404).entity(e.getMessage()).build();
+		}
+	}
 }
