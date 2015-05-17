@@ -289,29 +289,30 @@ class CategoryNode {
 				"Sampling number %d is larger than the total number %d", sampleNum, (int)total));
 		}
 		
-		// calculate the cdf [current node, children]
-		double[] cdf = new double[counts.length];
-		cdf[0] = counts[0] / total;
+		// calculate the cdf [current node, children]		
+		int[] cdf = new int[counts.length];
+		cdf[0] = counts[0];
 		for (int i = 1; i < cdf.length; i++) {
-			cdf[i] = cdf[i-1] + counts[i]/total;
+			cdf[i] = cdf[i-1] + counts[i];
 		}		
 		logger.debug("CDF: " + Arrays.toString(cdf));
 		
-		// binary search
+		// linear search
 		int[] samples = new int[counts.length];
 		for (int i = 0; i < sampleNum; i++) {
-			double dice = Math.random();
-			int low = 0; 
-			int high = cdf.length - 1;
-			while (low < high) {
-				int mid = (low + high) / 2;
-				if (cdf[mid] >= dice) {
-					high = mid;
-				} else {
-					low = mid + 1;
+			int dice = (int)(Math.random() * total) + 1;
+			for (int index = 0; index < cdf.length; index++) {
+				if (cdf[index] >= dice) {
+					samples[index]++;
+					counts[index]--;
+					break;
 				}
 			}
-			samples[low]++;
+			
+			total--;
+			for (int j = 1; j < counts.length; j++) {
+				cdf[j] = cdf[j-1] + counts[j];
+			}
 		}
 		return samples;
 	}
