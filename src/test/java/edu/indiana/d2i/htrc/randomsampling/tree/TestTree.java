@@ -1,8 +1,7 @@
 package edu.indiana.d2i.htrc.randomsampling.tree;
 
+import java.io.IOException;
 import java.util.List;
-
-import junit.framework.Assert;
 
 import org.junit.Test;
 
@@ -13,7 +12,7 @@ import edu.indiana.d2i.htrc.randomsampling.exceptions.SampleNumberTooLarge;
 public class TestTree {
 	
 	@Test
-	public void testTreeCreation() throws NoCategoryFound, SampleNumberTooLarge {
+	public void testTreeCreation() throws NoCategoryFound, SampleNumberTooLarge, IOException {
 		Configuration config = Configuration.getSingleton();
 //		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./eng-QH-callno");
 		config.setString(Configuration.PropertyNames.VOLUME_CALLNO, "./eng-volume-callnumber.info");
@@ -21,8 +20,8 @@ public class TestTree {
 		CategoryTree tree = CategoryTree.getSingelton(config);
 		
 		
-		List<String> samples = tree.randomSampling("DQ78-210", 14);
-		System.out.println(samples.toString());
+//		List<String> samples = tree.randomSampling("DQ78-210", 14);
+//		System.out.println(samples.toString());
 		
 		
 		System.out.println("QH1-278.5 " + tree.findIdCount("QH1-278.5"));
@@ -36,6 +35,9 @@ public class TestTree {
 		System.out.println("QH540-549.5 " + tree.findIdCount("QH540-549.5"));
 		System.out.println("QH573-671 " + tree.findIdCount("QH573-671"));
 		System.out.println("QH705-705.5 " + tree.findIdCount("QH705-705.5"));
+		
+		
+		tree.writeToJsonFile("full.json");
 		
 	}
 }

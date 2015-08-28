@@ -5,6 +5,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import org.apache.log4j.Logger;
+import org.codehaus.jettison.json.JSONArray;
+import org.codehaus.jettison.json.JSONException;
+import org.codehaus.jettison.json.JSONObject;
 
 import edu.indiana.d2i.htrc.randomsampling.exceptions.SampleNumberTooLarge;
 
@@ -380,6 +383,20 @@ class CategoryNode {
 			res.addAll(child.getAllIDs());
 		}
 		return res;
+	}
+	
+	public JSONObject getJsonObject() throws JSONException {
+		JSONObject rootNode = new JSONObject();
+		rootNode.put("name", this.categoryStr);
+		rootNode.put("size", this.idList.size());
+		
+		JSONArray list = new JSONArray();
+		for (CategoryNode child : children.childNodes) {
+			list.put(child.getJsonObject());
+		}
+		
+		rootNode.put("children", list);
+		return rootNode;
 	}
 	
 	public String toString() {

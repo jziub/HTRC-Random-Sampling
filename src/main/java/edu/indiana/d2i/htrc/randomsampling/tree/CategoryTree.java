@@ -1,13 +1,16 @@
 package edu.indiana.d2i.htrc.randomsampling.tree;
 
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.FileInputStream;
 import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.*;
 
 import org.apache.log4j.Logger;
+import org.codehaus.jettison.json.JSONException;
 
 import com.hp.hpl.jena.rdf.model.Model;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
@@ -37,10 +40,7 @@ public class CategoryTree {
 			String str = iter.next().getObject().toString();					
 			if (str.startsWith("http://inkdroid.org/lcco/") && !str.equals(uri)) {				
 				String category = str.substring(str.lastIndexOf("/")+1);
-				category = category.replaceAll("\\(|\\)|\\s", "");
-				
-//				System.out.println(category);
-				
+				category = category.replaceAll("\\(|\\)|\\s", "");				
 				CategoryNode child = parent.addChild(category);				
 				dfs(child, model, model.createResource(str), childProperty);
 			}
@@ -201,6 +201,14 @@ public class CategoryTree {
 			}			
 		} else {
 			return node.getAllIDs();
+		}
+	}	
+	
+	public void writeToJsonFile(String filename) throws IOException {
+		try (BufferedWriter writer = new BufferedWriter(new FileWriter(filename))) {
+			writer.write(this.root.getJsonObject().toString());
+		} catch (JSONException e) {
+			throw new IOException(e);
 		}
 	}
 }
